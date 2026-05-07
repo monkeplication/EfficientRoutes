@@ -1,0 +1,73 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Django stuff
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Environment variables
+.env
+
+# Static & media files
+staticfiles/
+media/
+
+# Migrations (optional)
+# Uncomment if you do NOT want migrations tracked
+# */migrations/
+# !*/migrations/__init__.py
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Type checking
+.mypy_cache/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Node modules (if using frontend tooling)
+node_modules/
+
+# Temporary files
+*.tmp
+*.swp
+
+# Gunicorn
+gunicorn.pid
+
+# Celery
+celerybeat-schedule
+
+# Docker
+*.pid
+
+# Secrets / certificates
+*.pem
+*.key
