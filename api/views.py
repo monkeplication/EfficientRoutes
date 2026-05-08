@@ -3,7 +3,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from .utils import geocode_city, get_route, FUEL_PRICES
-
+from django.shortcuts import render
+import json
 
 @api_view(["POST"])
 def get_fuel_route(request):
@@ -93,7 +94,7 @@ def get_fuel_route(request):
         "total_distance_miles": round(total_miles, 1),
         "fuel_stops": fuel_stops,
         "total_fuel_cost_usd": round(total_cost, 2),
-        "route_waypoints": waypoints[::50],  # thinned for map display
+        "route_waypoints": waypoints[::20],  # thinned for map display
     })
 
 #Yes, all the states of the great United States...
@@ -115,3 +116,74 @@ STATE_NAMES = {
 
 def get_state_abbr(full_name):
     return STATE_NAMES.get(full_name, full_name[:2].upper())
+
+def map_view(request):
+    start = request.GET.get("start", "")
+    end = request.GET.get("end", "")
+
+    route_data = None
+    error = None
+
+    if start and end:
+        start_coords = geocode_city(start)
+        end_coords = geocode_city(end)
+
+        if not start_coords or not end_coords:
+            error = "Could not geocode one or both cities."
+        else:
+            route = get_route(start_coords, end_coords)
+            if not route:
+                error = "Could not get route from OSRM."
+            else:
+                total_miles = route["distance_miles"]
+                waypoints = route["waypoints"]
+
+                MAX_RANGE = 500
+                MPG = 10
+                fuel_stops = []
+                num_waypoints = len(waypoints)
+                step = max(1, num_waypoints // 100)
+
+                for i in range(0, num_waypoints, step):
+                    lat, lon = waypoints[i]
+                    miles_covered = (i / num_waypoints) * total_miles
+                    miles_since_last_fill = miles_covered - (
+                        fuel_stops[-1]["mile_marker"] if fuel_stops else 0
+                    )
+                    if miles_since_last_fill >= MAX_RANGE * 0.75:
+                        import reverse_geocoder as rg
+                        result = rg.search((lat, lon), verbose=False)
+                        state_code = result[0].get("admin1", "")
+                        state_abbr = get_state_abbr(state_code)
+                        price = FUEL_PRICES.get(state_abbr)
+                        if price:
+                            fuel_stops.append({
+                                "lat": lat,
+                                "lon": lon,
+                                "state": state_abbr,
+                                "price_per_gallon": price,
+                                "mile_marker": round(miles_covered, 1),
+                            })
+
+                total_cost = 0.0
+                for i, stop in enumerate(fuel_stops):
+                    miles = stop["mile_marker"] if i == 0 else stop["mile_marker"] - fuel_stops[i-1]["mile_marker"]
+                    total_cost += (miles / MPG) * stop["price_per_gallon"]
+                last_marker = fuel_stops[-1]["mile_marker"] if fuel_stops else 0
+                total_cost += ((total_miles - last_marker) / MPG) * (fuel_stops[-1]["price_per_gallon"] if fuel_stops else 0)
+
+                route_data = {
+                    "start": start,
+                    "end": end,
+                    "total_miles": round(total_miles, 1),
+                    "total_cost": round(total_cost, 2),
+                    "fuel_stops": fuel_stops,
+                    "waypoints": waypoints[::20],  # thinned for map
+                }
+
+    return render(request, "api/map.html", {
+        "route_data": json.dumps(route_data) if route_data else "null",
+        "error": error,
+        "start": start,
+        "end": end,
+    })
