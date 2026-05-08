@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fuel Route Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: sans-serif;
+            background: #f5f5f5;
+        }
+
+        .header {
+            background: #1a1a2e;
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+        }
+
+        .search-form input {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: none;
+            font-size: 13px;
+            width: 180px;
+        }
+
+        .search-form button {
+            padding: 8px 16px;
+            background: #378ADD;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 12px;
+            padding: 12px 24px;
+            background: white;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .stat {
+            background: #f8f8f8;
+            border-radius: 8px;
+            padding: 10px 16px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #888;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+
+        #map {
+            width: 100%;
+            height: calc(100vh - 180px);
+        }
+
+        .stops-panel {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            background: white;
+            border-radius: 10px;
+            padding: 14px;
+            width: 240px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .stops-panel h3 {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+
+        .stop-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+
+        .stop-row:last-child {
+            border-bottom: none;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #EF9F27;
+            flex-shrink: 0;
+        }
+
+        .stop-state {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .stop-mile {
+            color: #aaa;
+            font-size: 11px;
+        }
+
+        .stop-price {
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+
+        .error {
+            padding: 20px 24px;
+            color: #E24B4A;
+            font-size: 14px;
+        }
+
+        .placeholder {
+            padding: 40px 24px;
+            color: #888;
+            font-size: 14px;
+        }
+
+        .map-container {
+            position: relative;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>⛽ PetroPath - An Efficient Fuel Planner</h1>
+        <form class="search-form" method="GET">
+            <input name="start" placeholder="Start city e.g. New York, NY" value="{{ start }}" />
+            <input name="end" placeholder="End city e.g. Los Angeles, CA" value="{{ end }}" />
+            <button type="submit">Get Route</button>
+        </form>
+    </div>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% elif route_data != "null" %}
+    <div class="stats" id="stats"></div>
+    <div class="map-container">
+        <div id="map"></div>
+        <div class="stops-panel">
+            <h3>Fuel Stops</h3>
+            <div id="stops-list"></div>
+        </div>
+    </div>
+    {% else %}
+    <div class="placeholder">Enter a start and end city above to plan your route.</div>
+    {% endif %}
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const routeData = {{ route_data| safe }};
+
+        if (routeData) {
+            // Stats
+            document.getElementById("stats").innerHTML = `
+      <div class="stat"><div class="stat-label">From → To</div><div class="stat-value" style="font-size:14px;">${routeData.start} → ${routeData.end}</div></div>
+      <div class="stat"><div class="stat-label">Total distance</div><div class="stat-value">${routeData.total_miles.toLocaleString()} mi</div></div>
+      <div class="stat"><div class="stat-label">Fuel stops</div><div class="stat-value">${routeData.fuel_stops.length}</div></div>
+      <div class="stat"><div class="stat-label">Total fuel cost</div><div class="stat-value">$${routeData.total_cost.toFixed(2)}</div></div>
+    `;
+
+            // Map
+            const map = L.map('map').setView([39.5, -95], 4);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap contributors © CARTO'
+}).addTo(map);
+
+            // Route polyline
+            const coords = routeData.waypoints.map(w => [w[0], w[1]]);
+            L.polyline(coords, { color: '#378ADD', weight: 3, opacity: 0.8 }).addTo(map);
+
+            // Start marker
+            const startIcon = L.divIcon({
+                html: '<div style="width:14px;height:14px;border-radius:50%;background:#1D9E75;border:2.5px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
+                className: '', iconAnchor: [7, 7]
+            });
+            const endIcon = L.divIcon({
+                html: '<div style="width:14px;height:14px;border-radius:50%;background:#E24B4A;border:2.5px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
+                className: '', iconAnchor: [7, 7]
+            });
+            const fuelIcon = L.divIcon({
+                html: '<div style="width:12px;height:12px;border-radius:50%;background:#EF9F27;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
+                className: '', iconAnchor: [6, 6]
+            });
+
+            const first = coords[0];
+            const last = coords[coords.length - 1];
+            L.marker(first, { icon: startIcon }).addTo(map).bindPopup(`<b>Start</b><br>${routeData.start}`);
+            L.marker(last, { icon: endIcon }).addTo(map).bindPopup(`<b>End</b><br>${routeData.end}`);
+
+            // Fuel stop markers + sidebar
+            const stopsList = document.getElementById("stops-list");
+            routeData.fuel_stops.forEach(stop => {
+                L.marker([stop.lat, stop.lon], { icon: fuelIcon })
+                    .addTo(map)
+                    .bindPopup(`<b>${stop.state}</b><br>Mile ${stop.mile_marker}<br>$${stop.price_per_gallon.toFixed(2)}/gal`);
+
+                stopsList.innerHTML += `
+        <div class="stop-row">
+          <div class="dot"></div>
+          <span class="stop-state">${stop.state}</span>
+          <span class="stop-mile">mi ${stop.mile_marker}</span>
+          <span class="stop-price">$${stop.price_per_gallon.toFixed(2)}</span>
+        </div>`;
+            });
+        }
+    </script>
+</body>
+
+</html>
