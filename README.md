@@ -139,6 +139,9 @@ http://127.0.0.1:8000/api/map/?start=New York, NY&end=Los Angeles, CA
 This approach makes only **1 external API call** (OSRM) per request. All fuel price lookups and state detection happen locally.
 
 ---
+## Architecture
+![Architecture Diagram](architecture.png)
+---
 
 ## Example Routes
 
