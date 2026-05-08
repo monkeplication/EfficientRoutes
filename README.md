@@ -1,4 +1,4 @@
-# ⛽ EfficientRoutes — Fuel Route Planner API
+# ⛽ EfficientRoutes: Fuel Route Planner API
 
 A Django REST API that calculates the optimal fuel stops for a road trip across the USA, minimising fuel costs based on real gas prices.
 
